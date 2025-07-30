@@ -14,20 +14,21 @@ TEXTURE_MAPS = {
 }
 
 def find_texture(directory, material, keywords):
+    """Search recursively for a texture matching material name and keywords."""
     material = material.lower()
-    for filename in os.listdir(directory):
-        name = filename.lower()
-        if material in name:
-            for kw in keywords:
-                if kw in name:
-                    return os.path.join(directory, filename)
+    for root, _, files in os.walk(directory):
+        for filename in files:
+            name = filename.lower()
+            if not any(name.endswith(ext) for ext in EXTENSIONS):
+                continue
+            if material in name:
+                for kw in keywords:
+                    if kw in name:
+                        return os.path.join(root, filename)
     return None
 
 def connect_file(shader, attribute, texture_path):
-    file_node = cmds.shadingNode(
-        'file', asTexture=True,
-        name=f"{shader}_{attribute}_file"
-    )
+    file_node = cmds.shadingNode('file', asTexture=True, name=f"{shader}_{attribute}_file")
     cmds.setAttr(file_node + '.fileTextureName', texture_path, type='string')
     cmds.connectAttr(file_node + '.outColor', shader + '.' + attribute, force=True)
     return file_node
@@ -47,8 +48,49 @@ def connect_height_map(shader, sg, texture_path):
     cmds.connectAttr(file_node + '.outAlpha', disp + '.displacement', force=True)
     cmds.connectAttr(disp + '.displacement', sg + '.displacementShader', force=True)
 
+def copy_material_attributes(original, shader):
+    """Copy basic attributes from FBX placeholder material to aiStandardSurface."""
+    try:
+        if cmds.objExists(original + '.color'):
+            color = cmds.getAttr(original + '.color')[0]
+            cmds.setAttr(shader + '.baseColor', *color, type='double3')
+    except:
+        pass
+    try:
+        if cmds.objExists(original + '.specularColor'):
+            spec = cmds.getAttr(original + '.specularColor')[0]
+            cmds.setAttr(shader + '.specularColor', *spec, type='double3')
+    except:
+        pass
+    try:
+        if cmds.objExists(original + '.transparency'):
+            trans = cmds.getAttr(original + '.transparency')[0]
+            inv = [1 - t for t in trans]
+            cmds.setAttr(shader + '.opacity', *inv, type='double3')
+    except:
+        pass
+    try:
+        if cmds.objExists(original + '.metalness'):
+            metal = cmds.getAttr(original + '.metalness')
+            if isinstance(metal, (list, tuple)):
+                metal = metal[0]
+            cmds.setAttr(shader + '.metalness', metal)
+    except:
+        pass
+    try:
+        if cmds.objExists(original + '.emission'):
+            emis = cmds.getAttr(original + '.emission')
+            if isinstance(emis, (list, tuple)):
+                emis = emis[0]
+            cmds.setAttr(shader + '.emission', emis)
+        if cmds.objExists(original + '.emissionColor'):
+            ecolor = cmds.getAttr(original + '.emissionColor')[0]
+            cmds.setAttr(shader + '.emissionColor', *ecolor, type='double3')
+    except:
+        pass
+
 def reconnect_existing_textures(original, shader):
-    """Reconnect file textures from the original material to a new aiStandardSurface shader."""
+    """Reconnect existing file textures from FBX material to aiStandardSurface shader."""
     reconnected = False
     mapping = {
         'color': ('baseColor', 'outColor'),
@@ -99,10 +141,37 @@ def reconnect_existing_textures(original, shader):
                 except:
                     pass
             reconnected = True
-
     return reconnected
 
-def setup_material(sg, directory):
+def apply_default_values(shader):
+    """Apply default material values if no textures are connected."""
+    try:
+        if not cmds.listConnections(shader + '.baseColor', source=True):
+            cmds.setAttr(shader + '.baseColor', 0.5, 0.5, 0.5, type='double3')
+    except:
+        pass
+    try:
+        if not cmds.listConnections(shader + '.specularRoughness', source=True):
+            cmds.setAttr(shader + '.specularRoughness', 0.5)
+    except:
+        pass
+    try:
+        if not cmds.listConnections(shader + '.metalness', source=True):
+            cmds.setAttr(shader + '.metalness', 0.0)
+    except:
+        pass
+    try:
+        if not cmds.listConnections(shader + '.opacity', source=True):
+            cmds.setAttr(shader + '.opacity', 1.0, 1.0, 1.0, type='double3')
+    except:
+        pass
+    try:
+        if not cmds.listConnections(shader + '.emission', source=True):
+            cmds.setAttr(shader + '.emission', 0)
+    except:
+        pass
+
+def setup_material(sg, texture_dir):
     shaders = cmds.ls(cmds.listConnections(sg + '.surfaceShader'), materials=True) or []
     if not shaders:
         return
@@ -114,29 +183,38 @@ def setup_material(sg, directory):
         shader = original
 
     cmds.connectAttr(shader + '.outColor', sg + '.surfaceShader', force=True)
+    copy_material_attributes(original, shader)
 
-    reused = reconnect_existing_textures(original, shader)
+    reused = False
+    try:
+        reused = reconnect_existing_textures(original, shader)
+    except:
+        pass
 
     if not reused:
         for attr, keywords in TEXTURE_MAPS.items():
-            tex = find_texture(directory, original, keywords)
-            if not tex:
-                continue
-            if attr == 'baseColor':
-                connect_file(shader, 'baseColor', tex)
-            elif attr == 'roughness':
-                connect_file(shader, 'specularRoughness', tex)
-            elif attr == 'metalness':
-                connect_file(shader, 'metalness', tex)
-            elif attr == 'emission':
-                connect_file(shader, 'emissionColor', tex)
-                cmds.setAttr(shader + '.emission', 1)
-            elif attr == 'opacity':
-                connect_file(shader, 'opacity', tex)
-            elif attr == 'normal':
-                connect_normal_map(shader, tex)
-            elif attr == 'height':
-                connect_height_map(shader, sg, tex)
+            tex = find_texture(texture_dir, original, keywords)
+            if tex:
+                try:
+                    if attr == 'baseColor':
+                        connect_file(shader, 'baseColor', tex)
+                    elif attr == 'roughness':
+                        connect_file(shader, 'specularRoughness', tex)
+                    elif attr == 'metalness':
+                        connect_file(shader, 'metalness', tex)
+                    elif attr == 'emission':
+                        connect_file(shader, 'emissionColor', tex)
+                        cmds.setAttr(shader + '.emission', 1)
+                    elif attr == 'opacity':
+                        connect_file(shader, 'opacity', tex)
+                    elif attr == 'normal':
+                        connect_normal_map(shader, tex)
+                    elif attr == 'height':
+                        connect_height_map(shader, sg, tex)
+                except:
+                    pass
+
+    apply_default_values(shader)
 
     if shader != original:
         remaining = cmds.listConnections(original, type='shadingEngine') or []
@@ -145,10 +223,16 @@ def setup_material(sg, directory):
 
 def import_fbx_with_materials(fbx_path):
     directory = os.path.dirname(fbx_path)
+    tex_select = cmds.fileDialog2(fileMode=3, caption='Select Textures Folder')
+    texture_dir = tex_select[0] if tex_select else directory
+
     cmds.file(fbx_path, i=True, type='FBX', ignoreVersion=True, mergeNamespacesOnClash=False, namespace='fbx', options='fbx')
     sgs = [s for s in cmds.ls(type='shadingEngine') if s not in ('initialShadingGroup', 'initialParticleSE')]
     for sg in sgs:
-        setup_material(sg, directory)
+        try:
+            setup_material(sg, texture_dir)
+        except:
+            pass
 
 if __name__ == '__main__':
     result = cmds.fileDialog2(fileMode=1, caption='Select FBX to Import')
