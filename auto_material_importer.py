@@ -272,15 +272,10 @@ def setup_material(sg, texture_dir):
         except Exception:
             uv_state[shp] = None
 
-    if cmds.nodeType(original) != 'aiStandardSurface':
-        src = cmds.rename(original, original + '_src')
-        shader = cmds.shadingNode('aiStandardSurface', asShader=True, name=original)
-        copy_basic_attrs(src, shader)
-        reused = reconnect_existing_textures(src, shader)
-    else:
-        src = original
-        shader = original
-        reused = reconnect_existing_textures(src, shader)
+    src = cmds.rename(original, original + '_src')
+    shader = cmds.shadingNode('aiStandardSurface', asShader=True, name=original)
+    copy_basic_attrs(src, shader)
+    reused = reconnect_existing_textures(src, shader)
 
     if not reused:
         for key, data in TEXTURE_RULES.items():
