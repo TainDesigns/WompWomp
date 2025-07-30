@@ -272,10 +272,12 @@ def setup_material(sg, texture_dir):
         except Exception:
             uv_state[shp] = None
 
+
     src = cmds.rename(original, original + '_src')
     shader = cmds.shadingNode('aiStandardSurface', asShader=True, name=original)
     copy_basic_attrs(src, shader)
     reused = reconnect_existing_textures(src, shader)
+
 
     if not reused:
         for key, data in TEXTURE_RULES.items():
@@ -308,6 +310,15 @@ def setup_material(sg, texture_dir):
         if uv:
             try:
                 cmds.polyUVSet(shp, currentUVSet=True, uvSet=uv)
+
+            except Exception:
+                pass
+
+    if shader != src:
+        if not cmds.listConnections(src, source=False, destination=True):
+            try:
+                cmds.delete(src)
+
             except Exception:
                 pass
 
