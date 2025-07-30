@@ -48,23 +48,8 @@ def connect_height_map(shader, sg, texture_path):
     cmds.connectAttr(disp + '.displacement', sg + '.displacementShader', force=True)
 
 def reconnect_existing_textures(original, shader):
-    """Reconnect file textures from the original material to a new shader.
-
-    Parameters
-    ----------
-    original : str
-        The material imported with the FBX.
-    shader : str
-        The newly created aiStandardSurface shader.
-
-    Returns
-    -------
-    bool
-        True if any textures were reconnected.
-    """
-
+    """Reconnect file textures from the original material to a new aiStandardSurface shader."""
     reconnected = False
-
     mapping = {
         'color': ('baseColor', 'outColor'),
         'specularColor': ('specularColor', 'outColor'),
@@ -76,9 +61,7 @@ def reconnect_existing_textures(original, shader):
     }
 
     for orig_attr, (new_attr, out_attr) in mapping.items():
-        plugs = cmds.listConnections(
-            f"{original}.{orig_attr}", source=True, destination=False, plugs=True
-        ) or []
+        plugs = cmds.listConnections(f"{original}.{orig_attr}", source=True, destination=False, plugs=True) or []
         for plug in plugs:
             node = plug.split('.')[0]
             if cmds.nodeType(node) != 'file':
@@ -86,27 +69,22 @@ def reconnect_existing_textures(original, shader):
             cmds.connectAttr(f"{node}.{out_attr}", f"{shader}.{new_attr}", force=True)
             try:
                 cmds.disconnectAttr(f"{node}.{out_attr}", plug)
-            except Exception:
+            except:
                 pass
             reconnected = True
 
-    normal_conns = cmds.listConnections(
-        f"{original}.normalCamera", source=True, destination=False, plugs=True
-    ) or []
+    normal_conns = cmds.listConnections(f"{original}.normalCamera", source=True, destination=False, plugs=True) or []
     for plug in normal_conns:
         node = plug.split('.')[0]
         bump = None
         file_node = None
         if cmds.nodeType(node) == 'bump2d':
             bump = node
-            file_conns = cmds.listConnections(
-                bump + '.bumpValue', source=True, destination=False, plugs=True
-            ) or []
+            file_conns = cmds.listConnections(bump + '.bumpValue', source=True, destination=False, plugs=True) or []
             if file_conns and cmds.nodeType(file_conns[0].split('.')[0]) == 'file':
                 file_node = file_conns[0].split('.')[0]
         elif cmds.nodeType(node) == 'file':
             file_node = node
-
         if file_node:
             if not bump:
                 bump = cmds.shadingNode('bump2d', asUtility=True, name=f"{shader}_bump")
@@ -115,10 +93,10 @@ def reconnect_existing_textures(original, shader):
             cmds.connectAttr(bump + '.outNormal', shader + '.normalCamera', force=True)
             try:
                 cmds.disconnectAttr(bump + '.outNormal', plug)
-            except Exception:
+            except:
                 try:
                     cmds.disconnectAttr(file_node + '.outAlpha', plug)
-                except Exception:
+                except:
                     pass
             reconnected = True
 
@@ -131,12 +109,10 @@ def setup_material(sg, directory):
     original = shaders[0]
     if cmds.nodeType(original) != 'aiStandardSurface':
         target = original + '_ai'
-        if not cmds.objExists(target):
-            shader = cmds.shadingNode('aiStandardSurface', asShader=True, name=target)
-        else:
-            shader = target
+        shader = cmds.shadingNode('aiStandardSurface', asShader=True, name=target) if not cmds.objExists(target) else target
     else:
         shader = original
+
     cmds.connectAttr(shader + '.outColor', sg + '.surfaceShader', force=True)
 
     reused = reconnect_existing_textures(original, shader)
@@ -169,17 +145,8 @@ def setup_material(sg, directory):
 
 def import_fbx_with_materials(fbx_path):
     directory = os.path.dirname(fbx_path)
-    cmds.file(
-        fbx_path,
-        i=True,
-        type='FBX',
-        ignoreVersion=True,
-        mergeNamespacesOnClash=False,
-        namespace='fbx',
-        options='fbx'
-    )
-    sgs = [s for s in cmds.ls(type='shadingEngine') if s not in (
-        'initialShadingGroup', 'initialParticleSE')]
+    cmds.file(fbx_path, i=True, type='FBX', ignoreVersion=True, mergeNamespacesOnClash=False, namespace='fbx', options='fbx')
+    sgs = [s for s in cmds.ls(type='shadingEngine') if s not in ('initialShadingGroup', 'initialParticleSE')]
     for sg in sgs:
         setup_material(sg, directory)
 
