@@ -134,21 +134,27 @@ def copy_basic_attrs(original, shader):
         if cmds.objExists(original + '.color'):
             col = cmds.getAttr(original + '.color')[0]
             cmds.setAttr(shader + '.baseColor', *col, type='double3')
-    except Exception:
-        pass
+
+    except Exception as e:
+        cmds.warning('Failed to copy color: %s' % e)
+
     try:
         if cmds.objExists(original + '.transparency'):
             tr = cmds.getAttr(original + '.transparency')[0]
             inv = [1 - v for v in tr]
             cmds.setAttr(shader + '.opacity', *inv, type='double3')
-    except Exception:
-        pass
+
+    except Exception as e:
+        cmds.warning('Failed to copy transparency: %s' % e)
+
     try:
         if cmds.objExists(original + '.specularColor'):
             spec = cmds.getAttr(original + '.specularColor')[0]
             cmds.setAttr(shader + '.specularColor', *spec, type='double3')
-    except Exception:
-        pass
+
+    except Exception as e:
+        cmds.warning('Failed to copy specularColor: %s' % e)
+
     for attr in ('roughness', 'specularRoughness'):
         if cmds.objExists(original + '.' + attr):
             try:
@@ -157,31 +163,34 @@ def copy_basic_attrs(original, shader):
                     val = val[0]
                 cmds.setAttr(shader + '.specularRoughness', val)
                 break
-            except Exception:
-                pass
+
+            except Exception as e:
+                cmds.warning('Failed to copy %s: %s' % (attr, e))
     try:
         if cmds.objExists(original + '.metalness'):
             val = cmds.getAttr(original + '.metalness')
             if isinstance(val, list):
                 val = val[0]
             cmds.setAttr(shader + '.metalness', val)
-    except Exception:
-        pass
+    except Exception as e:
+        cmds.warning('Failed to copy metalness: %s' % e)
     try:
         if cmds.objExists(original + '.emissionColor'):
             col = cmds.getAttr(original + '.emissionColor')[0]
             cmds.setAttr(shader + '.emissionColor', *col, type='double3')
             cmds.setAttr(shader + '.emission', 1)
-    except Exception:
-        pass
+    except Exception as e:
+        cmds.warning('Failed to copy emissionColor: %s' % e)
     try:
+
         if cmds.objExists(original + '.emission'):
             val = cmds.getAttr(original + '.emission')
             if isinstance(val, list):
                 val = val[0]
             cmds.setAttr(shader + '.emission', val)
-    except Exception:
-        pass
+
+    except Exception as e:
+        cmds.warning('Failed to copy emission: %s' % e)
 
 
 def reconnect_existing_textures(original, shader):
@@ -205,7 +214,26 @@ def reconnect_existing_textures(original, shader):
             node = plug.split('.')[0]
             if cmds.nodeType(node) != 'file':
                 continue
-            cmds.connectAttr('%s.%s' % (node, chan), '%s.%s' % (shader, dst_attr), force=True)
+
+            target = '%s.%s' % (shader, dst_attr)
+            source = '%s.%s' % (node, chan)
+
+            if chan == 'outAlpha' and not cmds.attributeQuery('outAlpha', node=node, exists=True):
+                if cmds.attributeQuery('outColorR', node=node, exists=True):
+                    source = '%s.outColorR' % node
+                else:
+                    source = '%s.outColor' % node
+
+            if dst_attr in ('specularRoughness', 'metalness', 'opacity'):
+                try:
+                    cmds.setAttr(node + '.colorSpace', 'Raw', type='string')
+                    if cmds.attributeQuery('alphaIsLuminance', node=node, exists=True):
+                        cmds.setAttr(node + '.alphaIsLuminance', 1)
+                except Exception:
+                    pass
+
+            cmds.connectAttr(source, target, force=True)
+
             try:
                 cmds.disconnectAttr('%s.%s' % (node, chan), plug)
             except Exception:
@@ -278,7 +306,6 @@ def setup_material(sg, texture_dir):
     copy_basic_attrs(src, shader)
     reused = reconnect_existing_textures(src, shader)
 
-
     if not reused:
         for key, data in TEXTURE_RULES.items():
             dst_attr = data['attr']
@@ -303,6 +330,7 @@ def setup_material(sg, texture_dir):
                 if key == 'emission':
                     cmds.setAttr(shader + '.emission', 1)
 
+
     apply_default_values(shader)
     cmds.connectAttr(shader + '.outColor', sg + '.surfaceShader', force=True)
 
@@ -310,14 +338,6 @@ def setup_material(sg, texture_dir):
         if uv:
             try:
                 cmds.polyUVSet(shp, currentUVSet=True, uvSet=uv)
-
-            except Exception:
-                pass
-
-    if shader != src:
-        if not cmds.listConnections(src, source=False, destination=True):
-            try:
-                cmds.delete(src)
 
             except Exception:
                 pass
