@@ -14,27 +14,9 @@ TEXTURE_MAPS = {
 }
 
 def find_texture(directory, material, keywords):
-    """Search ``directory`` recursively for a texture file.
-
-    The search is performed in two passes:
-    1. filenames containing ``material`` and a keyword
-    2. filenames containing only the keyword
-
-    Parameters
-    ----------
-    directory : str
-        Base directory to search.
-    material : str
-        Name of the material to prioritise in the search.
-    keywords : List[str]
-        Keywords describing the texture type (e.g. ``roughness``).
-
-    Returns
-    -------
-    str or None
-        Path to the matching texture file or ``None`` if nothing is found.
-    """
-
+    """Search directory recursively for a texture file.
+    Pass 1: filenames containing material name and keyword
+    Pass 2: filenames containing only keyword."""
     material = material.lower()
     first_pass = None
     for root, _, files in os.walk(directory):
@@ -53,11 +35,9 @@ def find_texture(directory, material, keywords):
     return first_pass
 
 def connect_file(shader, attribute, texture_path, use_alpha=False):
-    """Create a ``file`` node with a ``place2dTexture`` and connect it."""
-
+    """Create file node with place2dTexture and connect it."""
     file_node = cmds.shadingNode('file', asTexture=True, name=f"{shader}_{attribute}_file")
     place = cmds.shadingNode('place2dTexture', asUtility=True, name=f"{file_node}_place2d")
-
     for attr in (
         'coverage', 'translateFrame', 'rotateFrame', 'mirrorU', 'mirrorV',
         'stagger', 'wrapU', 'wrapV', 'repeatUV', 'offset', 'rotateUV',
@@ -108,30 +88,18 @@ def connect_height_map(shader, sg, texture_path):
     cmds.connectAttr(disp + '.displacement', sg + '.displacementShader', force=True)
 
 def copy_material_attributes(original, shader):
-    """Copy basic color and transparency attributes from ``original`` to ``shader``.
-
-    Parameters
-    ----------
-    original : str
-        Name of the placeholder material imported with the FBX.
-    shader : str
-        Name of the new aiStandardSurface shader.
-    """
-
     try:
         if cmds.objExists(original + '.color'):
             color = cmds.getAttr(original + '.color')[0]
             cmds.setAttr(shader + '.baseColor', *color, type='double3')
     except Exception:
         pass
-
     try:
         if cmds.objExists(original + '.specularColor'):
             spec = cmds.getAttr(original + '.specularColor')[0]
             cmds.setAttr(shader + '.specularColor', *spec, type='double3')
     except Exception:
         pass
-
     try:
         if cmds.objExists(original + '.transparency'):
             trans = cmds.getAttr(original + '.transparency')[0]
@@ -139,7 +107,6 @@ def copy_material_attributes(original, shader):
             cmds.setAttr(shader + '.opacity', *inv, type='double3')
     except Exception:
         pass
-
     try:
         if cmds.objExists(original + '.metalness'):
             metal = cmds.getAttr(original + '.metalness')
@@ -148,7 +115,6 @@ def copy_material_attributes(original, shader):
             cmds.setAttr(shader + '.metalness', metal)
     except Exception:
         pass
-
     try:
         if cmds.objExists(original + '.emission'):
             emis = cmds.getAttr(original + '.emission')
@@ -162,23 +128,7 @@ def copy_material_attributes(original, shader):
         pass
 
 def reconnect_existing_textures(original, shader):
-    """Reconnect file textures from the original material to a new shader.
-
-    Parameters
-    ----------
-    original : str
-        The material imported with the FBX.
-    shader : str
-        The newly created aiStandardSurface shader.
-
-    Returns
-    -------
-    bool
-        True if any textures were reconnected.
-    """
-
     reconnected = False
-
     mapping = {
         'color': ('baseColor', 'outColor'),
         'specularColor': ('specularColor', 'outColor'),
@@ -192,37 +142,27 @@ def reconnect_existing_textures(original, shader):
     }
 
     for orig_attr, (new_attr, out_attr) in mapping.items():
-        plugs = cmds.listConnections(
-            f"{original}.{orig_attr}", source=True, destination=False, plugs=True
-        ) or []
+        plugs = cmds.listConnections(f"{original}.{orig_attr}", source=True, destination=False, plugs=True) or []
         for plug in plugs:
             node = plug.split('.')[0]
             if cmds.nodeType(node) != 'file':
                 continue
-            cmds.connectAttr(f"{node}.{out_attr}", f"{shader}.{new_attr}", force=True)
             try:
+                cmds.connectAttr(f"{node}.{out_attr}", f"{shader}.{new_attr}", force=True)
                 cmds.disconnectAttr(f"{node}.{out_attr}", plug)
+                if new_attr == 'emissionColor':
+                    cmds.setAttr(shader + '.emission', 1)
+                reconnected = True
             except Exception:
                 pass
-            if new_attr == 'emissionColor':
-                try:
-                    cmds.setAttr(shader + '.emission', 1)
-                except Exception:
-                    pass
-            reconnected = True
 
-    normal_conns = cmds.listConnections(
-        f"{original}.normalCamera", source=True, destination=False, plugs=True
-    ) or []
+    normal_conns = cmds.listConnections(f"{original}.normalCamera", source=True, destination=False, plugs=True) or []
     for plug in normal_conns:
         node = plug.split('.')[0]
         bump = None
         file_node = None
         if cmds.nodeType(node) == 'bump2d':
-            bump = node
-            file_conns = cmds.listConnections(
-                bump + '.bumpValue', source=True, destination=False, plugs=True
-            ) or []
+            file_conns = cmds.listConnections(bump + '.bumpValue', source=True, destination=False, plugs=True) or []
             if file_conns and cmds.nodeType(file_conns[0].split('.')[0]) == 'file':
                 file_node = file_conns[0].split('.')[0]
         elif cmds.nodeType(node) == 'file':
@@ -246,32 +186,26 @@ def reconnect_existing_textures(original, shader):
     return reconnected
 
 def apply_default_values(shader):
-    """Assign reasonable defaults to shader channels if they have no inputs."""
-
     try:
         if not cmds.listConnections(shader + '.baseColor', source=True):
             cmds.setAttr(shader + '.baseColor', 0.5, 0.5, 0.5, type='double3')
     except Exception:
         pass
-
     try:
         if not cmds.listConnections(shader + '.specularRoughness', source=True):
             cmds.setAttr(shader + '.specularRoughness', 0.5)
     except Exception:
         pass
-
     try:
         if not cmds.listConnections(shader + '.metalness', source=True):
             cmds.setAttr(shader + '.metalness', 0.0)
     except Exception:
         pass
-
     try:
         if not cmds.listConnections(shader + '.opacity', source=True):
             cmds.setAttr(shader + '.opacity', 1.0, 1.0, 1.0, type='double3')
     except Exception:
         pass
-
     try:
         if not cmds.listConnections(shader + '.emission', source=True):
             cmds.setAttr(shader + '.emission', 0)
@@ -285,10 +219,7 @@ def setup_material(sg, texture_dir):
     original = shaders[0]
     if cmds.nodeType(original) != 'aiStandardSurface':
         target = original + '_ai'
-        if not cmds.objExists(target):
-            shader = cmds.shadingNode('aiStandardSurface', asShader=True, name=target)
-        else:
-            shader = target
+        shader = cmds.shadingNode('aiStandardSurface', asShader=True, name=target) if not cmds.objExists(target) else target
     else:
         shader = original
 
@@ -339,15 +270,13 @@ def setup_material(sg, texture_dir):
 
     cmds.connectAttr(shader + '.outColor', sg + '.surfaceShader', force=True)
 
-    # Restore UV sets to avoid Maya switching to a default one
+    # Restore UV sets
     for shape, uv in uv_map.items():
         if uv:
             try:
                 cmds.polyUVSet(shape, currentUVSet=True, uvSet=uv)
             except Exception:
                 pass
-
-    # Do not delete the original material automatically to avoid UV resets
 
 def import_fbx_with_materials(fbx_path):
     directory = os.path.dirname(fbx_path)
