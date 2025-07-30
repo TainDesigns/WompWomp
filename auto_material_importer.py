@@ -14,6 +14,7 @@ TEXTURE_MAPS = {
 }
 
 def find_texture(directory, material, keywords):
+
     """Search ``directory`` recursively for a texture file.
 
     The search is performed in two passes:
@@ -35,6 +36,7 @@ def find_texture(directory, material, keywords):
         Path to the matching texture file or ``None`` if nothing is found.
     """
 
+
     material = material.lower()
     first_pass = None
     for root, _, files in os.walk(directory):
@@ -51,6 +53,7 @@ def find_texture(directory, material, keywords):
                         first_pass = path
                     break
     return first_pass
+
 
 def connect_file(shader, attribute, texture_path, use_red=False):
     """Create a ``file`` node with a ``place2dTexture`` and connect it.
@@ -82,12 +85,16 @@ def connect_file(shader, attribute, texture_path, use_red=False):
     cmds.connectAttr(place + '.outUvFilterSize', file_node + '.uvFilterSize', force=True)
 
     cmds.setAttr(file_node + '.fileTextureName', texture_path, type='string')
+
     out_attr = 'outColorR' if use_red else 'outColor'
+
     cmds.connectAttr(file_node + '.' + out_attr, shader + '.' + attribute, force=True)
     return file_node
 
 def connect_normal_map(shader, texture_path):
+
     """Create an ``aiNormalMap`` node for a normal texture and connect it."""
+
 
     file_node = cmds.shadingNode('file', asTexture=True, name=f"{shader}_normal_file")
     place = cmds.shadingNode('place2dTexture', asUtility=True, name=f"{file_node}_place2d")
@@ -105,6 +112,7 @@ def connect_normal_map(shader, texture_path):
     ai_normal = cmds.shadingNode('aiNormalMap', asUtility=True, name=f"{shader}_aiNormalMap")
     cmds.connectAttr(file_node + '.outColor', ai_normal + '.input', force=True)
     cmds.connectAttr(ai_normal + '.outValue', shader + '.normalCamera', force=True)
+
 
 def connect_height_map(shader, sg, texture_path):
     file_node = cmds.shadingNode('file', asTexture=True, name=f"{shader}_disp_file")
@@ -124,6 +132,7 @@ def connect_height_map(shader, sg, texture_path):
     cmds.connectAttr(disp + '.displacement', sg + '.displacementShader', force=True)
 
 def copy_material_attributes(original, shader):
+
     """Copy basic color and transparency attributes from ``original`` to ``shader``.
 
     Parameters
@@ -178,6 +187,7 @@ def copy_material_attributes(original, shader):
         pass
 
 def reconnect_existing_textures(original, shader):
+
     """Reconnect file textures from the original material to a new shader.
 
     Parameters
@@ -195,26 +205,31 @@ def reconnect_existing_textures(original, shader):
 
     reconnected = False
 
+
     mapping = {
         'color': ('baseColor', 'outColor'),
         'specularColor': ('specularColor', 'outColor'),
-        'specular': ('specularColor', 'outColor'),
+        'specular': ('specularColor', 'outColorR'),
         'roughness': ('specularRoughness', 'outColorR'),
         'metalness': ('metalness', 'outColorR'),
         'metallic': ('metalness', 'outColorR'),
         'opacity': ('opacity', 'outColorR'),
+
         'transparency': ('opacity', 'outTransparency'),
         'emissionColor': ('emissionColor', 'outColor'),
     }
 
     for orig_attr, (new_attr, out_attr) in mapping.items():
+
         plugs = cmds.listConnections(
             f"{original}.{orig_attr}", source=True, destination=False, plugs=True
         ) or []
+
         for plug in plugs:
             node = plug.split('.')[0]
             if cmds.nodeType(node) != 'file':
                 continue
+
             cmds.connectAttr(f"{node}.{out_attr}", f"{shader}.{new_attr}", force=True)
             try:
                 cmds.disconnectAttr(f"{node}.{out_attr}", plug)
@@ -242,10 +257,12 @@ def reconnect_existing_textures(original, shader):
             ) or []
             if conns and cmds.nodeType(conns[0].split('.')[0]) == 'file':
                 file_node = conns[0].split('.')[0]
+
         elif cmds.nodeType(node) == 'file':
             file_node = node
 
         if file_node:
+
             if not ai_normal:
                 ai_normal = cmds.shadingNode(
                     'aiNormalMap', asUtility=True, name=f"{shader}_aiNormalMap"
@@ -261,6 +278,7 @@ def reconnect_existing_textures(original, shader):
             except Exception:
                 try:
                     cmds.disconnectAttr(file_node + '.outColor', plug)
+
                 except Exception:
                     pass
             reconnected = True
@@ -268,7 +286,9 @@ def reconnect_existing_textures(original, shader):
     return reconnected
 
 def apply_default_values(shader):
+
     """Assign reasonable defaults to shader channels if they have no inputs."""
+
 
     try:
         if not cmds.listConnections(shader + '.baseColor', source=True):
@@ -307,10 +327,12 @@ def setup_material(sg, texture_dir):
     original = shaders[0]
     if cmds.nodeType(original) != 'aiStandardSurface':
         target = original + '_ai'
+
         if not cmds.objExists(target):
             shader = cmds.shadingNode('aiStandardSurface', asShader=True, name=target)
         else:
             shader = target
+
     else:
         shader = original
 
@@ -342,14 +364,18 @@ def setup_material(sg, texture_dir):
                 if attr == 'baseColor':
                     connect_file(shader, 'baseColor', tex)
                 elif attr == 'roughness':
+
                     connect_file(shader, 'specularRoughness', tex, use_red=True)
                 elif attr == 'metalness':
                     connect_file(shader, 'metalness', tex, use_red=True)
+
                 elif attr == 'emission':
                     connect_file(shader, 'emissionColor', tex)
                     cmds.setAttr(shader + '.emission', 1)
                 elif attr == 'opacity':
+
                     connect_file(shader, 'opacity', tex, use_red=True)
+
                 elif attr == 'normal':
                     connect_normal_map(shader, tex)
                 elif attr == 'height':
@@ -361,7 +387,7 @@ def setup_material(sg, texture_dir):
 
     cmds.connectAttr(shader + '.outColor', sg + '.surfaceShader', force=True)
 
-    # Restore UV sets to avoid Maya switching to a default one
+
     for shape, uv in uv_map.items():
         if uv:
             try:
@@ -369,7 +395,6 @@ def setup_material(sg, texture_dir):
             except Exception:
                 pass
 
-    # Do not delete the original material automatically to avoid UV resets
 
 def import_fbx_with_materials(fbx_path):
     directory = os.path.dirname(fbx_path)

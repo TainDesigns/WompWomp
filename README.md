@@ -1,3 +1,4 @@
+
 # WompWomp
 
 This repository contains `auto_material_importer.py`, a Maya Python script that
@@ -18,3 +19,4 @@ and can optionally search a folder for missing textures.
    replacement, so texture mapping remains intact. Normal maps are routed through
    `aiNormalMap` and scalar maps like roughness, metalness and opacity use the
    texture's red channel for accurate PBR results.
+
