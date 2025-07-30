@@ -14,4 +14,5 @@ and can optionally search a folder for missing textures.
 5. The script imports the file, creates or reuses `aiStandardSurface` shaders,
    copies placeholder attributes, reconnects any imported textures and searches
    the selected folder for missing maps. Default values are applied when maps
-   are not found.
+   are not found. UV sets assigned to meshes are preserved during material
+   replacement, so texture mapping remains intact.

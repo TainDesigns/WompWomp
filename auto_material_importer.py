@@ -292,6 +292,17 @@ def setup_material(sg, texture_dir):
     else:
         shader = original
 
+    # Preserve current UV sets for shapes using this shading group
+    connected_shapes = cmds.listConnections(sg, type='mesh') or []
+    uv_map = {}
+    for shape in connected_shapes:
+        try:
+            uv_sets = cmds.polyUVSet(shape, query=True, allUVSets=True) or []
+            current_uv = cmds.polyUVSet(shape, query=True, currentUVSet=True)
+            uv_map[shape] = current_uv[0] if current_uv else (uv_sets[0] if uv_sets else None)
+        except Exception:
+            uv_map[shape] = None
+
     copy_material_attributes(original, shader)
 
     reused = False
@@ -328,13 +339,15 @@ def setup_material(sg, texture_dir):
 
     cmds.connectAttr(shader + '.outColor', sg + '.surfaceShader', force=True)
 
-    if shader != original:
-        remaining = cmds.listConnections(original, type='shadingEngine') or []
-        if not remaining:
+    # Restore UV sets to avoid Maya switching to a default one
+    for shape, uv in uv_map.items():
+        if uv:
             try:
-                cmds.delete(original)
+                cmds.polyUVSet(shape, currentUVSet=True, uvSet=uv)
             except Exception:
                 pass
+
+    # Do not delete the original material automatically to avoid UV resets
 
 def import_fbx_with_materials(fbx_path):
     directory = os.path.dirname(fbx_path)
