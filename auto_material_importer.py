@@ -134,21 +134,27 @@ def copy_basic_attrs(original, shader):
         if cmds.objExists(original + '.color'):
             col = cmds.getAttr(original + '.color')[0]
             cmds.setAttr(shader + '.baseColor', *col, type='double3')
+
     except Exception as e:
         cmds.warning('Failed to copy color: %s' % e)
+
     try:
         if cmds.objExists(original + '.transparency'):
             tr = cmds.getAttr(original + '.transparency')[0]
             inv = [1 - v for v in tr]
             cmds.setAttr(shader + '.opacity', *inv, type='double3')
+
     except Exception as e:
         cmds.warning('Failed to copy transparency: %s' % e)
+
     try:
         if cmds.objExists(original + '.specularColor'):
             spec = cmds.getAttr(original + '.specularColor')[0]
             cmds.setAttr(shader + '.specularColor', *spec, type='double3')
+
     except Exception as e:
         cmds.warning('Failed to copy specularColor: %s' % e)
+
     for attr in ('roughness', 'specularRoughness'):
         if cmds.objExists(original + '.' + attr):
             try:
@@ -157,6 +163,7 @@ def copy_basic_attrs(original, shader):
                     val = val[0]
                 cmds.setAttr(shader + '.specularRoughness', val)
                 break
+
             except Exception as e:
                 cmds.warning('Failed to copy %s: %s' % (attr, e))
     try:
@@ -175,11 +182,13 @@ def copy_basic_attrs(original, shader):
     except Exception as e:
         cmds.warning('Failed to copy emissionColor: %s' % e)
     try:
+
         if cmds.objExists(original + '.emission'):
             val = cmds.getAttr(original + '.emission')
             if isinstance(val, list):
                 val = val[0]
             cmds.setAttr(shader + '.emission', val)
+
     except Exception as e:
         cmds.warning('Failed to copy emission: %s' % e)
 
@@ -205,6 +214,7 @@ def reconnect_existing_textures(original, shader):
             node = plug.split('.')[0]
             if cmds.nodeType(node) != 'file':
                 continue
+
             target = '%s.%s' % (shader, dst_attr)
             source = '%s.%s' % (node, chan)
 
@@ -223,6 +233,7 @@ def reconnect_existing_textures(original, shader):
                     pass
 
             cmds.connectAttr(source, target, force=True)
+
             try:
                 cmds.disconnectAttr('%s.%s' % (node, chan), plug)
             except Exception:
@@ -289,6 +300,7 @@ def setup_material(sg, texture_dir):
         except Exception:
             uv_state[shp] = None
 
+
     src = cmds.rename(original, original + '_src')
     shader = cmds.shadingNode('aiStandardSurface', asShader=True, name=original)
     copy_basic_attrs(src, shader)
@@ -318,6 +330,7 @@ def setup_material(sg, texture_dir):
                 if key == 'emission':
                     cmds.setAttr(shader + '.emission', 1)
 
+
     apply_default_values(shader)
     cmds.connectAttr(shader + '.outColor', sg + '.surfaceShader', force=True)
 
@@ -325,6 +338,7 @@ def setup_material(sg, texture_dir):
         if uv:
             try:
                 cmds.polyUVSet(shp, currentUVSet=True, uvSet=uv)
+
             except Exception:
                 pass
 
